@@ -1128,6 +1128,534 @@ def create_matrix_with_flow_text(target_text="AutoSuper", output_file='matrix_fl
     print(f"Matrix effect with flowing color text saved as {output_file}")
 
 
+def create_matrix_with_bright_text(target_text="AutoSuper", output_file='matrix_bright_text.mp4', duration=10, fps=30):
+    """
+    Creates a Matrix-style digital rain effect with large embedded text that remains bright
+    
+    Args:
+        target_text: Text to embed in the digital rain using large repeated characters that stay bright
+        output_file: Output video file name
+        duration: Duration of the video in seconds
+        fps: Frames per second
+    """
+    
+    # Define video properties
+    height, width = 720, 1280
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+    
+    # Initialize columns for the digital rain
+    font_size = 16
+    cols = width // font_size
+    drops = [0] * cols  # Initialize drops position for each column
+    
+    # Total frames to generate
+    total_frames = duration * fps
+    
+    # Define character patterns for each letter (7x10 grid for larger size)
+    char_patterns = {
+        'A': [
+            "  000  ",
+            " 00 00 ",
+            "00   00",
+            "00   00",
+            "0000000",
+            "00   00",
+            "00   00"
+        ],
+        'U': [
+            "00   00",
+            "00   00", 
+            "00   00",
+            "00   00",
+            "00   00",
+            "00   00",
+            " 00000 "
+        ],
+        'T': [
+            "0000000",
+            "   00   ",
+            "   00   ",
+            "   00   ",
+            "   00   ",
+            "   00   ",
+            "   00   "
+        ],
+        'O': [
+            " 00000 ",
+            "00   00",
+            "00   00",
+            "00   00", 
+            "00   00",
+            "00   00",
+            " 00000 "
+        ],
+        'S': [
+            " 000000",
+            "00     ",
+            "00     ",
+            " 00000 ",
+            "     00",
+            "     00",
+            "000000 "
+        ],
+        'P': [
+            "000000 ",
+            "00   00",
+            "00   00",
+            "000000 ",
+            "00     ",
+            "00     ",
+            "00     "
+        ],
+        'E': [
+            "0000000",
+            "00     ",
+            "00     ",
+            "000000 ",
+            "00     ",
+            "00     ",
+            "0000000"
+        ],
+        'R': [
+            "000000 ",
+            "00   00",
+            "00   00", 
+            "000000 ",
+            "00 00  ",
+            "00  00 ",
+            "00   00"
+        ],
+        ' ': [  # Space
+            "       ",
+            "       ",
+            "       ",
+            "       ",
+            "       ",
+            "       ",
+            "       "
+        ]
+    }
+    
+    # Calculate position to center the text
+    char_width = 7  # Pattern width
+    char_height = 7  # Pattern height
+    spacing = 2  # Space between characters
+    total_width = len(target_text) * (char_width + spacing) - spacing
+    start_col = (cols - total_width) // 2  # Center the text horizontally
+    
+    # Calculate vertical position (centered)
+    start_row = (height // font_size) // 2 - char_height // 2
+    
+    # Pre-calculate colors for each character position to maintain consistency
+    char_colors = {}
+    for idx, char in enumerate(target_text.upper()):
+        # Generate base color based on character and position
+        hue_base = (idx * 30) % 180  # Different base hue for each character position
+        char_colors[idx] = hue_base
+    
+    for frame_idx in range(total_frames):
+        # Create black background
+        img = np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # Set up font properties
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        thickness = 1
+        
+        # Update and draw drops for each column
+        for i in range(cols):
+            # Calculate position
+            x = i * font_size
+            y = drops[i] * font_size
+            
+            # Check if this position is part of our target text pattern
+            is_in_pattern = False
+            pattern_char = None
+            char_idx = -1
+            
+            # Calculate which character position in the target text this column might be part of
+            for idx, char in enumerate(target_text.upper()):
+                if char in char_patterns:
+                    # Calculate the column range for this character
+                    char_start_col = start_col + idx * (char_width + spacing)
+                    char_end_col = char_start_col + char_width
+                    
+                    if char_start_col <= i < char_end_col:
+                        # Calculate which row in the pattern this corresponds to
+                        row_in_pattern = int((y // font_size) - start_row)
+                        
+                        if 0 <= row_in_pattern < char_height:
+                            # Get the pattern for this character
+                            pattern = char_patterns[char]
+                            # Get the specific position in the pattern
+                            pattern_row = pattern[row_in_pattern]
+                            pattern_col = i - char_start_col
+                            
+                            if 0 <= pattern_col < len(pattern_row) and pattern_row[pattern_col] == '0':
+                                is_in_pattern = True
+                                pattern_char = char  # Use the character itself
+                                char_idx = idx
+                                break
+            
+            if is_in_pattern:
+                # Calculate color based on character index and time for overall color shift
+                base_hue = char_colors[char_idx]
+                # Add time-based shift to make colors cycle smoothly
+                time_shift = int((frame_idx / fps) * 20) % 180  # Shift colors over time
+                hue = (base_hue + time_shift) % 180
+                
+                # Ensure full saturation and brightness for vibrant colors
+                saturation = 255  
+                value = 255       
+                
+                # Convert HSV to BGR for OpenCV
+                hsv_color = np.uint8([[[hue, saturation, value]]])
+                bgr_color = cv2.cvtColor(hsv_color, cv2.COLOR_HSV2BGR)[0][0].tolist()
+                
+                # Display the character in consistent bright color for the whole character
+                cv2.putText(img, pattern_char, (x, y), font, font_scale, tuple(bgr_color), thickness)
+            else:
+                # Get a random character - mostly '0' and '1' for binary effect, sometimes letters
+                char = random.choice(['0', '1'] + [chr(i) for i in range(33, 126)]*2)  # More binary chars
+                
+                # Draw the character - bright green for head of trail, darker green for tail
+                cv2.putText(img, char, (x, y), font, font_scale, (0, 255, 0), thickness)
+            
+            # Draw trailing characters - keeping them bright too
+            for j in range(1, 10):  # 10 characters in trail
+                if y - j * font_size > 0:
+                    # Check if this trailing position could be part of our target text pattern
+                    trail_row_pos = int((y - j * font_size) // font_size)
+                    
+                    is_trail_in_pattern = False
+                    trail_pattern_char = None
+                    trail_char_idx = -1
+                    
+                    for idx, char_t in enumerate(target_text.upper()):
+                        if char_t in char_patterns:
+                            # Calculate the column range for this character
+                            char_start_col = start_col + idx * (char_width + spacing)
+                            char_end_col = char_start_col + char_width
+                            
+                            if char_start_col <= i < char_end_col:
+                                # Calculate which row in the pattern this corresponds to
+                                pattern_row_idx = trail_row_pos - start_row
+                                
+                                if 0 <= pattern_row_idx < char_height:
+                                    # Get the pattern for this character
+                                    pattern = char_patterns[char_t]
+                                    # Get the specific position in the pattern
+                                    pattern_row = pattern[pattern_row_idx]
+                                    pattern_col = i - char_start_col
+                                    
+                                    if 0 <= pattern_col < len(pattern_row) and pattern_row[pattern_col] == '0':
+                                        is_trail_in_pattern = True
+                                        trail_pattern_char = char_t  # Use the character itself
+                                        trail_char_idx = idx
+                                        break
+                    
+                    if is_trail_in_pattern:
+                        # Calculate consistent bright color for trailing characters
+                        base_hue = char_colors[trail_char_idx]
+                        time_shift = int((frame_idx / fps) * 20) % 180
+                        hue = (base_hue + time_shift) % 180
+                        
+                        # Keep brightness high but reduce saturation slightly for trail effect
+                        saturation = 220  # High but slightly less than main text
+                        value = 255       # Keep maximum brightness
+                        
+                        hsv_color = np.uint8([[[hue, saturation, value]]])
+                        bgr_color = cv2.cvtColor(hsv_color, cv2.COLOR_HSV2BGR)[0][0].tolist()
+                        
+                        cv2.putText(img, trail_pattern_char, (x, y - j * font_size), font, font_scale, 
+                                   tuple(bgr_color), thickness)
+                    else:
+                        # Fade from bright green to dark green for non-text characters
+                        intensity = max(50, 255 - j * 20)
+                        char = random.choice(['0', '1'] + [chr(i) for i in range(33, 126)]*2)
+                        cv2.putText(img, char, (x, y - j * font_size), font, font_scale, 
+                                   (0, intensity, 0), thickness)
+            
+            # Reset drop if it reaches bottom or randomly
+            if y > height or random.random() > 0.975:
+                drops[i] = 0
+            
+            # Move drop down
+            drops[i] += 1
+        
+        # Write the frame to video
+        out.write(img)
+    
+    # Release everything
+    out.release()
+    print(f"Matrix effect with bright text saved as {output_file}")
+
+
+def create_matrix_with_consistent_color_text(target_text="AutoSuper", output_file='matrix_consistent_color_text.mp4', duration=10, fps=30):
+    """
+    Creates a Matrix-style digital rain effect with large embedded text that has consistent color per character
+    
+    Args:
+        target_text: Text to embed in the digital rain using large repeated characters with consistent color per character
+        output_file: Output video file name
+        duration: Duration of the video in seconds
+        fps: Frames per second
+    """
+    
+    # Define video properties
+    height, width = 720, 1280
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+    
+    # Initialize columns for the digital rain
+    font_size = 16
+    cols = width // font_size
+    drops = [0] * cols  # Initialize drops position for each column
+    
+    # Total frames to generate
+    total_frames = duration * fps
+    
+    # Define character patterns for each letter (7x10 grid for larger size)
+    char_patterns = {
+        'A': [
+            "  000  ",
+            " 00 00 ",
+            "00   00",
+            "00   00",
+            "0000000",
+            "00   00",
+            "00   00"
+        ],
+        'U': [
+            "00   00",
+            "00   00", 
+            "00   00",
+            "00   00",
+            "00   00",
+            "00   00",
+            " 00000 "
+        ],
+        'T': [
+            "0000000",
+            "   00   ",
+            "   00   ",
+            "   00   ",
+            "   00   ",
+            "   00   ",
+            "   00   "
+        ],
+        'O': [
+            " 00000 ",
+            "00   00",
+            "00   00",
+            "00   00", 
+            "00   00",
+            "00   00",
+            " 00000 "
+        ],
+        'S': [
+            " 000000",
+            "00     ",
+            "00     ",
+            " 00000 ",
+            "     00",
+            "     00",
+            "000000 "
+        ],
+        'P': [
+            "000000 ",
+            "00   00",
+            "00   00",
+            "000000 ",
+            "00     ",
+            "00     ",
+            "00     "
+        ],
+        'E': [
+            "0000000",
+            "00     ",
+            "00     ",
+            "000000 ",
+            "00     ",
+            "00     ",
+            "0000000"
+        ],
+        'R': [
+            "000000 ",
+            "00   00",
+            "00   00", 
+            "000000 ",
+            "00 00  ",
+            "00  00 ",
+            "00   00"
+        ],
+        ' ': [  # Space
+            "       ",
+            "       ",
+            "       ",
+            "       ",
+            "       ",
+            "       ",
+            "       "
+        ]
+    }
+    
+    # Calculate position to center the text
+    char_width = 7  # Pattern width
+    char_height = 7  # Pattern height
+    spacing = 2  # Space between characters
+    total_width = len(target_text) * (char_width + spacing) - spacing
+    start_col = (cols - total_width) // 2  # Center the text horizontally
+    
+    # Calculate vertical position (centered)
+    start_row = (height // font_size) // 2 - char_height // 2
+    
+    # Pre-calculate colors for each character position to maintain consistency
+    char_colors = {}
+    for idx, char in enumerate(target_text.upper()):
+        # Generate base color based on character and position
+        hue_base = (idx * 30) % 180  # Different base hue for each character position
+        char_colors[idx] = hue_base
+    
+    for frame_idx in range(total_frames):
+        # Create black background
+        img = np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # Set up font properties
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        thickness = 1
+        
+        # Update and draw drops for each column
+        for i in range(cols):
+            # Calculate position
+            x = i * font_size
+            y = drops[i] * font_size
+            
+            # Check if this position is part of our target text pattern
+            is_in_pattern = False
+            pattern_char = None
+            char_idx = -1
+            
+            # Calculate which character position in the target text this column might be part of
+            for idx, char in enumerate(target_text.upper()):
+                if char in char_patterns:
+                    # Calculate the column range for this character
+                    char_start_col = start_col + idx * (char_width + spacing)
+                    char_end_col = char_start_col + char_width
+                    
+                    if char_start_col <= i < char_end_col:
+                        # Calculate which row in the pattern this corresponds to
+                        row_in_pattern = int((y // font_size) - start_row)
+                        
+                        if 0 <= row_in_pattern < char_height:
+                            # Get the pattern for this character
+                            pattern = char_patterns[char]
+                            # Get the specific position in the pattern
+                            pattern_row = pattern[row_in_pattern]
+                            pattern_col = i - char_start_col
+                            
+                            if 0 <= pattern_col < len(pattern_row) and pattern_row[pattern_col] == '0':
+                                is_in_pattern = True
+                                pattern_char = char  # Use the character itself
+                                char_idx = idx
+                                break
+            
+            if is_in_pattern:
+                # Calculate color based on character index and time for overall color shift
+                base_hue = char_colors[char_idx]
+                # Add time-based shift to make colors cycle smoothly
+                time_shift = int((frame_idx / fps) * 20) % 180  # Shift colors over time
+                hue = (base_hue + time_shift) % 180
+                
+                # Ensure full saturation and brightness for vibrant colors
+                saturation = 255  
+                value = 255       
+                
+                # Convert HSV to BGR for OpenCV
+                hsv_color = np.uint8([[[hue, saturation, value]]])
+                bgr_color = cv2.cvtColor(hsv_color, cv2.COLOR_HSV2BGR)[0][0].tolist()
+                
+                # Display the character in consistent bright color for the whole character
+                cv2.putText(img, pattern_char, (x, y), font, font_scale, tuple(bgr_color), thickness)
+            else:
+                # Get a random character - mostly '0' and '1' for binary effect, sometimes letters
+                char = random.choice(['0', '1'] + [chr(i) for i in range(33, 126)]*2)  # More binary chars
+                
+                # Draw the character - bright green for head of trail, darker green for tail
+                cv2.putText(img, char, (x, y), font, font_scale, (0, 255, 0), thickness)
+            
+            # Draw trailing characters - fade effect
+            for j in range(1, 10):  # 10 characters in trail
+                if y - j * font_size > 0:
+                    # Check if this trailing position could be part of our target text pattern
+                    trail_row_pos = int((y - j * font_size) // font_size)
+                    
+                    is_trail_in_pattern = False
+                    trail_pattern_char = None
+                    trail_char_idx = -1
+                    
+                    for idx, char_t in enumerate(target_text.upper()):
+                        if char_t in char_patterns:
+                            # Calculate the column range for this character
+                            char_start_col = start_col + idx * (char_width + spacing)
+                            char_end_col = char_start_col + char_width
+                            
+                            if char_start_col <= i < char_end_col:
+                                # Calculate which row in the pattern this corresponds to
+                                pattern_row_idx = trail_row_pos - start_row
+                                
+                                if 0 <= pattern_row_idx < char_height:
+                                    # Get the pattern for this character
+                                    pattern = char_patterns[char_t]
+                                    # Get the specific position in the pattern
+                                    pattern_row = pattern[pattern_row_idx]
+                                    pattern_col = i - char_start_col
+                                    
+                                    if 0 <= pattern_col < len(pattern_row) and pattern_row[pattern_col] == '0':
+                                        is_trail_in_pattern = True
+                                        trail_pattern_char = char_t  # Use the character itself
+                                        trail_char_idx = idx
+                                        break
+                    
+                    if is_trail_in_pattern:
+                        # Calculate consistent color for trailing characters
+                        base_hue = char_colors[trail_char_idx]
+                        time_shift = int((frame_idx / fps) * 20) % 180
+                        hue = (base_hue + time_shift) % 180
+                        
+                        # Reduce saturation and brightness with trail length for fading effect
+                        saturation = max(100, 255 - j * 15)
+                        value = max(100, 255 - j * 15)
+                        
+                        hsv_color = np.uint8([[[hue, saturation, value]]])
+                        bgr_color = cv2.cvtColor(hsv_color, cv2.COLOR_HSV2BGR)[0][0].tolist()
+                        
+                        cv2.putText(img, trail_pattern_char, (x, y - j * font_size), font, font_scale, 
+                                   tuple(bgr_color), thickness)
+                    else:
+                        # Fade from bright green to dark green
+                        intensity = max(50, 255 - j * 20)
+                        char = random.choice(['0', '1'] + [chr(i) for i in range(33, 126)]*2)
+                        cv2.putText(img, char, (x, y - j * font_size), font, font_scale, 
+                                   (0, intensity, 0), thickness)
+            
+            # Reset drop if it reaches bottom or randomly
+            if y > height or random.random() > 0.975:
+                drops[i] = 0
+            
+            # Move drop down
+            drops[i] += 1
+        
+        # Write the frame to video
+        out.write(img)
+    
+    # Release everything
+    out.release()
+    print(f"Matrix effect with consistent color text saved as {output_file}")
+
+
 if __name__ == "__main__":
     # Text to display
     text_lines = [
@@ -1141,7 +1669,7 @@ if __name__ == "__main__":
     print("1. 数字雨效果")
     print("2. 滚动文字效果")
     print("3. 组合效果（数字雨+滚动文字）")
-    print("4. 流动色彩大文本的数字雨效果（显示自定义文本）")
+    print("4. 明亮大文本的数字雨效果（显示自定义文本）")
     
     choice = input("请输入选择 (1, 2, 3 或 4): ")
     
@@ -1160,10 +1688,10 @@ if __name__ == "__main__":
         custom_text = input("请输入要在数字雨中显示的文本 (默认为 'AutoSuper'): ").strip()
         if not custom_text:
             custom_text = "AutoSuper"
-        output_filename = f"matrix_flow_text_{timestamp}.mp4"
-        create_matrix_with_flow_text(target_text=custom_text, output_file=output_filename)
+        output_filename = f"matrix_bright_text_{timestamp}.mp4"
+        create_matrix_with_bright_text(target_text=custom_text, output_file=output_filename)
     else:
-        print("无效选择，运行流动色彩大文本效果")
+        print("无效选择，运行明亮大文本效果")
         custom_text = "AutoSuper"
-        output_filename = f"matrix_flow_text_{timestamp}.mp4"
-        create_matrix_with_flow_text(target_text=custom_text, output_file=output_filename)
+        output_filename = f"matrix_bright_text_{timestamp}.mp4"
+        create_matrix_with_bright_text(target_text=custom_text, output_file=output_filename)
